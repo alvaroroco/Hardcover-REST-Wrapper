@@ -1,0 +1,21 @@
+[project]
+name = "hardcover-rest"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "alvaroroco", email = "alvaroroco@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.135.1",
+    "requests>=2.32.5",
+    "uvicorn>=0.38.0",
+]
+
+[project.scripts]
+hardcover-rest = "hardcover_rest:main"
+
+[build-system]
+requires = ["uv_build>=0.9.10,<0.10.0"]
+build-backend = "uv_build"

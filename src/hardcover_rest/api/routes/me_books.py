@@ -36,7 +36,9 @@ def _get_me_id(api_key: str) -> int:
         me = me[0] if me else None
 
     if not isinstance(me, dict) or me.get("id") is None:
-        raise HTTPException(status_code=502, detail="Unable to resolve current user from Hardcover API")
+        raise HTTPException(
+            status_code=502, detail="Unable to resolve current user from Hardcover API"
+        )
 
     return int(me["id"])
 
@@ -86,7 +88,10 @@ def _resolve_status_id(api_key: str, slug: str, name: str) -> int:
     if fallback is not None:
         return fallback
 
-    raise HTTPException(status_code=502, detail=f"Unable to resolve status '{slug}' from Hardcover GraphQL API")
+    raise HTTPException(
+        status_code=502,
+        detail=f"Unable to resolve status '{slug}' from Hardcover GraphQL API",
+    )
 
 
 @router.get("")
@@ -158,7 +163,9 @@ def get_me_book_statuses(api_key: str = Depends(get_api_key)):
     data = graphql_request(gql_query, {"user_id": user_id}, api_key)
     books = data.get("user_books", [])
     status_counts = Counter(
-        int(book["status_id"]) for book in books if isinstance(book, dict) and book.get("status_id") is not None
+        int(book["status_id"])
+        for book in books
+        if isinstance(book, dict) and book.get("status_id") is not None
     )
 
     return {
@@ -180,8 +187,15 @@ def get_currently_reading_books(
     offset: int = Query(0, ge=0),
     api_key: str = Depends(get_api_key),
 ):
-    currently_reading_status_id = _resolve_status_id(api_key, "currently_reading", "Currently Reading")
-    return get_me_books(limit=limit, offset=offset, status_id=currently_reading_status_id, api_key=api_key)
+    currently_reading_status_id = _resolve_status_id(
+        api_key, "currently_reading", "Currently Reading"
+    )
+    return get_me_books(
+        limit=limit,
+        offset=offset,
+        status_id=currently_reading_status_id,
+        api_key=api_key,
+    )
 
 
 @router.get("/read")
@@ -191,7 +205,9 @@ def get_read_books(
     api_key: str = Depends(get_api_key),
 ):
     read_status_id = _resolve_status_id(api_key, "read", "Read")
-    return get_me_books(limit=limit, offset=offset, status_id=read_status_id, api_key=api_key)
+    return get_me_books(
+        limit=limit, offset=offset, status_id=read_status_id, api_key=api_key
+    )
 
 
 @router.get("/want-to-read")
@@ -201,7 +217,9 @@ def get_want_to_read_books(
     api_key: str = Depends(get_api_key),
 ):
     want_to_read_status_id = _resolve_status_id(api_key, "want_to_read", "Want to Read")
-    return get_me_books(limit=limit, offset=offset, status_id=want_to_read_status_id, api_key=api_key)
+    return get_me_books(
+        limit=limit, offset=offset, status_id=want_to_read_status_id, api_key=api_key
+    )
 
 
 @router.post("")
@@ -279,7 +297,6 @@ def patch_me_book(
       $status_id: Int
       $edition_id: Int
       $rating: numeric
-      $review_raw: String
       $review_has_spoilers: Boolean
       $owned: Boolean
     ) {
@@ -289,7 +306,6 @@ def patch_me_book(
           status_id: $status_id
           edition_id: $edition_id
           rating: $rating
-          review_raw: $review_raw
           review_has_spoilers: $review_has_spoilers
           owned: $owned
         }
@@ -301,8 +317,6 @@ def patch_me_book(
           book_id
           status_id
           rating
-          review_raw
-          review_has_spoilers
           reviewed_at
           date_added
         }
@@ -310,15 +324,11 @@ def patch_me_book(
     }
     """
 
-    variables = {
-        "id": user_book_id,
-        "status_id": payload.get("status_id"),
-        "edition_id": payload.get("edition_id"),
-        "rating": payload.get("rating"),
-        "review_raw": payload.get("review_raw"),
-        "review_has_spoilers": payload.get("review_has_spoilers"),
-        "owned": payload.get("owned"),
-    }
+    variables = {"id": user_book_id}
+
+    for field in ["status_id", "edition_id", "rating", "review_has_spoilers", "owned"]:
+        if field in payload and payload[field] is not None:
+            variables[field] = payload[field]
 
     data = graphql_request(gql_query, variables, api_key)
     return data.get("update_user_book")

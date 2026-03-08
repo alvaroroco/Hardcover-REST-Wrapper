@@ -264,19 +264,23 @@ def patch_me_book(
     payload: MeBookPatchPayload = Body(...),
     api_key: str = Depends(get_api_key),
 ):
+    if payload.progress_pages is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="progress_pages is not supported by the current Hardcover GraphQL schema",
+        )
+
     gql_query = """
     mutation UpdateMeBook(
       $id: Int!
       $status_id: Int
       $progress_percent: numeric
-      $progress_pages: Int
     ) {
       update_user_book(
         id: $id
         object: {
           status_id: $status_id
           progress_percent: $progress_percent
-          progress_pages: $progress_pages
         }
       ) {
         id
@@ -286,7 +290,6 @@ def patch_me_book(
           book_id
           status_id
           progress_percent
-          progress_pages
           reviewed_at
           date_added
         }
@@ -297,14 +300,14 @@ def patch_me_book(
     variables = {"id": user_book_id}
     payload_data = payload.model_dump(exclude_none=True)
 
-    for field in ["status_id", "progress_percent", "progress_pages"]:
+    for field in ["status_id", "progress_percent"]:
         if field in payload_data and payload_data[field] is not None:
             variables[field] = payload_data[field]
 
     if len(variables) == 1:
         raise HTTPException(
             status_code=422,
-            detail="At least one of status_id, progress_percent, progress_pages is required",
+            detail="At least one of status_id or progress_percent is required",
         )
 
     data = graphql_request(gql_query, variables, api_key)

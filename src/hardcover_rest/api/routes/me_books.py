@@ -32,6 +32,12 @@ class MeBookStatusPayload(BaseModel):
     status: str
 
 
+class MeBookPatchPayload(BaseModel):
+    status_id: int | None = None
+    progress_percent: float | None = None
+    progress_pages: int | None = None
+
+
 def _get_me_id(api_key: str) -> int:
     data = graphql_request(_ME_QUERY, {}, api_key)
     me = data.get("me")
@@ -248,5 +254,63 @@ def patch_me_book_status(
     user_book = result.get("user_book") if isinstance(result, dict) else None
     if isinstance(user_book, dict):
         user_book["status"] = _status_label(int(user_book.get("status_id", 0)))
+
+    return result
+
+
+@router.patch("/{user_book_id}")
+def patch_me_book(
+    user_book_id: int,
+    payload: MeBookPatchPayload = Body(...),
+    api_key: str = Depends(get_api_key),
+):
+    gql_query = """
+    mutation UpdateMeBook(
+      $id: Int!
+      $status_id: Int
+      $progress_percent: numeric
+      $progress_pages: Int
+    ) {
+      update_user_book(
+        id: $id
+        object: {
+          status_id: $status_id
+          progress_percent: $progress_percent
+          progress_pages: $progress_pages
+        }
+      ) {
+        id
+        user_book {
+          id
+          user_id
+          book_id
+          status_id
+          progress_percent
+          progress_pages
+          reviewed_at
+          date_added
+        }
+      }
+    }
+    """
+
+    variables = {"id": user_book_id}
+    payload_data = payload.model_dump(exclude_none=True)
+
+    for field in ["status_id", "progress_percent", "progress_pages"]:
+        if field in payload_data and payload_data[field] is not None:
+            variables[field] = payload_data[field]
+
+    if len(variables) == 1:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one of status_id, progress_percent, progress_pages is required",
+        )
+
+    data = graphql_request(gql_query, variables, api_key)
+    result = data.get("update_user_book", {})
+    user_book = result.get("user_book") if isinstance(result, dict) else None
+    if isinstance(user_book, dict) and user_book.get("status_id") is not None:
+        user_book["status"] = _status_label(int(user_book["status_id"]))
 
     return result

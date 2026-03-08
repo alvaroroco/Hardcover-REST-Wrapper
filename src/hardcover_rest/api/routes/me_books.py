@@ -293,34 +293,26 @@ def patch_me_book(
 ):
     gql_query = """
     mutation UpdateMeBook(
-      $id: Int!
-      $status_id: Int
-      $edition_id: Int
-      $rating: numeric
-      $review_has_spoilers: Boolean
-      $owned: Boolean
+    $id: Int!
+    $status_id: Int
     ) {
-      update_user_book(
+    update_user_book(
         id: $id
         object: {
-          status_id: $status_id
-          edition_id: $edition_id
-          rating: $rating
-          review_has_spoilers: $review_has_spoilers
-          owned: $owned
+        status_id: $status_id
         }
-      ) {
+    ) {
         id
         user_book {
-          id
-          user_id
-          book_id
-          status_id
-          rating
-          reviewed_at
-          date_added
+        id
+        user_id
+        book_id
+        status_id
+        rating
+        reviewed_at
+        date_added
         }
-      }
+    }
     }
     """
 

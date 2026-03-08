@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 hardcover-rest = "hardcover_rest:main"
+app = "hardcover_rest.api:app"
 
 [build-system]
 requires = ["uv_build>=0.9.10,<0.10.0"]

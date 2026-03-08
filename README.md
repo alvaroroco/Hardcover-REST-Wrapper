@@ -1,23 +1,21 @@
 # Hardcover REST Wrapper
 
-`hardcover-rest` is a FastAPI service that wraps the Hardcover GraphQL API and exposes it through REST endpoints.
+`hardcover-rest` is a FastAPI wrapper around Hardcover GraphQL focused on a minimal, AI-friendly API.
 
-It is designed for clients that work better with REST than GraphQL, especially AI agents and tool-calling workflows that prefer:
+The API intentionally hides internal Hardcover details like `status_id` and `user_book_id`.
 
-- predictable HTTP paths
-- query parameters and JSON bodies
-- OpenAPI schemas for automatic tool generation
+## Supported Workflows
 
-## Why this project
+1. Search books
+2. View your books by status
+3. Add a book to your library
+4. Change a book status
 
-Hardcover provides a GraphQL API. This wrapper translates common reading workflows into REST endpoints so you can integrate faster in systems where GraphQL is not ideal.
+Supported statuses:
 
-Examples:
-
-- searching books
-- reading/updating your shelves (`/me/books`)
-- creating reviews (`/me/reviews`)
-- managing lists (`/me/lists`)
+- `to_read`
+- `reading`
+- `read`
 
 ## Tech Stack
 
@@ -34,7 +32,7 @@ Examples:
 uv sync
 ```
 
-2. Run the API locally:
+2. Run locally:
 
 ```bash
 uv run uvicorn hardcover_rest.api:app --host 0.0.0.0 --port 8000 --reload
@@ -47,15 +45,13 @@ uv run uvicorn hardcover_rest.api:app --host 0.0.0.0 --port 8000 --reload
 
 ## Authentication
 
-All protected endpoints expect your Hardcover API key in the `Authorization` header:
+Protected endpoints require your Hardcover API key in the `Authorization` header:
 
 ```http
 Authorization: <HARDCOVER_API_KEY>
 ```
 
-If the header is missing, the API returns `401`.
-
-## Implemented Endpoints
+## Endpoints
 
 ### Health
 
@@ -63,40 +59,26 @@ If the header is missing, the API returns `401`.
 
 ### Books
 
-- `GET /books/search`
-- `GET /books/{book_id}`
+- `GET /books/search?query=<text>`
 
 ### My Books
 
-- `GET /me/books`
-- `GET /me/books/statuses`
-- `GET /me/books/currently-reading`
+- `GET /me/books/reading`
+- `GET /me/books/to-read`
 - `GET /me/books/read`
-- `GET /me/books/want-to-read`
 - `POST /me/books`
-- `PATCH /me/books/{user_book_id}`
-
-### My Reviews
-
-- `GET /me/reviews`
-- `POST /me/reviews`
-
-### My Lists
-
-- `GET /me/lists`
-- `POST /me/lists`
-- `POST /lists/{list_id}/books`
+- `PATCH /me/books/{book_id}/status`
 
 ## Example Requests
 
 ### Search books
 
 ```bash
-curl -X GET "http://localhost:8000/books/search?query=dune&query_type=Book&per_page=10&page=1" \
+curl -X GET "http://localhost:8000/books/search?query=mistborn" \
   -H "Authorization: $HARDCOVER_API_KEY"
 ```
 
-### Add a book to your library
+### Add book to library
 
 ```bash
 curl -X POST "http://localhost:8000/me/books" \
@@ -104,65 +86,37 @@ curl -X POST "http://localhost:8000/me/books" \
   -H "Content-Type: application/json" \
   -d '{
     "book_id": 123,
-    "status_id": 2,
-    "rating": 4.5
+    "status": "to_read"
   }'
 ```
 
-### Discover available status IDs
+### Start reading a book
 
 ```bash
-curl -X GET "http://localhost:8000/me/books/statuses" \
-  -H "Authorization: $HARDCOVER_API_KEY"
-```
-
-### Get only books with one status
-
-```bash
-curl -X GET "http://localhost:8000/me/books?status_id=2&limit=100&offset=0" \
-  -H "Authorization: $HARDCOVER_API_KEY"
-```
-
-### Get currently reading books directly
-
-```bash
-curl -X GET "http://localhost:8000/me/books/currently-reading?limit=50&offset=0" \
-  -H "Authorization: $HARDCOVER_API_KEY"
-```
-
-### Get read books directly
-
-```bash
-curl -X GET "http://localhost:8000/me/books/read?limit=50&offset=0" \
-  -H "Authorization: $HARDCOVER_API_KEY"
-```
-
-### Get want-to-read books directly
-
-```bash
-curl -X GET "http://localhost:8000/me/books/want-to-read?limit=50&offset=0" \
-  -H "Authorization: $HARDCOVER_API_KEY"
-```
-
-### Create a review
-
-```bash
-curl -X POST "http://localhost:8000/me/reviews" \
+curl -X PATCH "http://localhost:8000/me/books/123/status" \
   -H "Authorization: $HARDCOVER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "book_id": 123,
-    "review_raw": "Great pacing and world-building.",
-    "rating": 4.0,
-    "review_has_spoilers": false
+    "status": "reading"
   }'
 ```
 
-## AI-Friendly Usage Notes
+### Mark book as read
 
-- Use `/openapi.json` to auto-generate tools/functions in your AI platform.
-- Keep one tool per endpoint for simpler agent behavior.
-- Forward the user’s Hardcover API key as `Authorization`.
+```bash
+curl -X PATCH "http://localhost:8000/me/books/123/status" \
+  -H "Authorization: $HARDCOVER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "read"
+  }'
+```
+
+## Notes for AI Agents
+
+- Use only status strings: `to_read`, `reading`, `read`.
+- Do not send `status_id` or `user_book_id`.
+- Use `/openapi.json` to generate tools.
 
 ## Project Structure
 

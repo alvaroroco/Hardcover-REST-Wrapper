@@ -145,6 +145,37 @@ def get_user_book_id(book_id: int, api_key: str) -> int:
     return int(row["id"])
 
 
+def _get_graphql_type_fields(api_key: str, type_name: str) -> set[str]:
+    gql_query = """
+    query TypeFields($type_name: String!) {
+      __type(name: $type_name) {
+        inputFields {
+          name
+        }
+        fields {
+          name
+        }
+      }
+    }
+    """
+    try:
+        data = graphql_request(gql_query, {"type_name": type_name}, api_key)
+    except HTTPException:
+        return set()
+    type_data = data.get("__type")
+    if not isinstance(type_data, dict):
+        return set()
+
+    names: set[str] = set()
+    for key in ["inputFields", "fields"]:
+        rows = type_data.get(key) or []
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("name"), str):
+                names.add(row["name"])
+
+    return names
+
+
 @router.get("/reading")
 def get_reading_books(
     limit: int = Query(50, ge=1, le=100),
@@ -264,51 +295,97 @@ def patch_me_book(
     payload: MeBookPatchPayload = Body(...),
     api_key: str = Depends(get_api_key),
 ):
-    if payload.progress_pages is not None:
-        raise HTTPException(
-            status_code=422,
-            detail="progress_pages is not supported by the current Hardcover GraphQL schema",
-        )
-
-    gql_query = """
-    mutation UpdateMeBook(
-      $id: Int!
-      $status_id: Int
-      $progress_percent: numeric
-    ) {
-      update_user_book(
-        id: $id
-        object: {
-          status_id: $status_id
-          progress_percent: $progress_percent
-        }
-      ) {
-        id
-        user_book {
-          id
-          user_id
-          book_id
-          status_id
-          progress_percent
-          reviewed_at
-          date_added
-        }
-      }
-    }
-    """
-
-    variables = {"id": user_book_id}
-    payload_data = payload.model_dump(exclude_none=True)
-
-    for field in ["status_id", "progress_percent"]:
-        if field in payload_data and payload_data[field] is not None:
-            variables[field] = payload_data[field]
-
-    if len(variables) == 1:
+    requested_updates = payload.model_dump(exclude_none=True)
+    if not requested_updates:
         raise HTTPException(
             status_code=422,
             detail="At least one of status_id or progress_percent is required",
         )
+
+    input_fields = _get_graphql_type_fields(api_key, "UserBookUpdateInput")
+    output_fields = _get_graphql_type_fields(api_key, "user_books")
+
+    if not input_fields:
+        input_fields = {"status_id"}
+    if not output_fields:
+        output_fields = {
+            "id",
+            "user_id",
+            "book_id",
+            "status_id",
+            "reviewed_at",
+            "date_added",
+        }
+
+    requested_keys = ["status_id", "progress_percent", "progress_pages"]
+    accepted_updates = {
+        key: requested_updates[key]
+        for key in requested_keys
+        if key in requested_updates and key in input_fields
+    }
+    rejected_updates = [
+        key
+        for key in requested_keys
+        if key in requested_updates and key not in accepted_updates
+    ]
+
+    if not accepted_updates:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "None of the requested update fields are supported by Hardcover GraphQL",
+                "requested": requested_updates,
+                "unsupported_fields": rejected_updates,
+            },
+        )
+
+    type_map = {
+        "status_id": "Int",
+        "progress_percent": "numeric",
+        "progress_pages": "Int",
+    }
+    variable_defs = ["$id: Int!"] + [
+        f"${field}: {type_map[field]}" for field in accepted_updates
+    ]
+    object_fields = [f"{field}: ${field}" for field in accepted_updates]
+    response_fields = [
+        field
+        for field in [
+            "id",
+            "user_id",
+            "book_id",
+            "status_id",
+            "progress_percent",
+            "progress_pages",
+            "reviewed_at",
+            "date_added",
+        ]
+        if field in output_fields
+    ]
+    response_fields_block = "\n          ".join(response_fields)
+    variable_defs_block = "\n      ".join(variable_defs)
+    object_fields_block = "\n          ".join(object_fields)
+
+    gql_query = f"""
+    mutation UpdateMeBook(
+      {variable_defs_block}
+    ) {{
+      update_user_book(
+        id: $id
+        object: {{
+          {object_fields_block}
+        }}
+      ) {{
+        id
+        user_book {{
+          {response_fields_block}
+        }}
+      }}
+    }}
+    """
+
+    variables = {"id": user_book_id}
+    variables.update(accepted_updates)
 
     data = graphql_request(gql_query, variables, api_key)
     result = data.get("update_user_book", {})
